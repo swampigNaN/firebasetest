@@ -26,14 +26,19 @@
   .room-status {
     font-weight: bold;
   }
+  #timestamp {
+    margin-top: 10px;
+    font-size: 14px;
+    font-family: sans-serif;
+  }
 </style>
-<!-- Firebase v8 SDK -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
 <h1>部屋の明暗表示</h1>
 <div id="roomsContainer"></div>
+<div id="timestamp"></div>
 
 <script>
 // ==== Firebase 初期化 ====
@@ -50,15 +55,21 @@ firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
 const container = document.getElementById('roomsContainer');
+const tsDiv = document.getElementById('timestamp');
 
-// Firebase 最新データ監視
-database.ref('rooms').orderByKey().limitToLast(1).on('value', snapshot => {
+// 最新データ監視
+database.ref('rooms/latest').on('value', snapshot => {
   container.innerHTML = ''; // 前の表示をクリア
-  const roomsData = snapshot.val();
-  if (!roomsData) return;
+  const data = snapshot.val();
+  if (!data) return;
 
-  const key = Object.keys(roomsData)[0];
-  const data = roomsData[key];
+  // タイムスタンプをまとめて表示
+  if (data.timestamp) {
+    const timestamp = new Date(data.timestamp);
+    tsDiv.textContent = "更新日時: " + timestamp.toLocaleString();
+  } else {
+    tsDiv.textContent = "";
+  }
 
   for (let i = 1; i <= 18; i++) {
     const roomKey = "room" + i;
@@ -67,7 +78,7 @@ database.ref('rooms').orderByKey().limitToLast(1).on('value', snapshot => {
     const div = document.createElement('div');
     div.classList.add('room');
 
-    // 状態に応じて色と文字を切り替え
+    // 状態に応じて色と文字
     let statusText;
     if (val === 1) {
       div.classList.add('bright');
@@ -80,7 +91,6 @@ database.ref('rooms').orderByKey().limitToLast(1).on('value', snapshot => {
       statusText = val;
     }
 
-    // 部屋番号と状態を別行で表示
     const roomNumber = document.createElement('div');
     roomNumber.classList.add('room-number');
     roomNumber.textContent = roomKey;
