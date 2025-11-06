@@ -1,109 +1,45 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>部屋の明暗表示</title>
-<style>
-  .room {
-    display: inline-block;
-    width: 80px;
-    height: 80px;
-    margin: 5px;
-    text-align: center;
-    font-family: sans-serif;
-    border-radius: 5px;
-    color: white;
-    vertical-align: top;
-    padding-top: 10px;
-  }
-  .bright { background-color: green; }
-  .dark { background-color: black; }
-  .other { background-color: gray; }
-  .room-number {
-    font-weight: bold;
-    margin-bottom: 5px;
-  }
-  .room-status {
-    font-weight: bold;
-  }
-  #timestamp {
-    margin-top: 10px;
-    font-size: 14px;
-    font-family: sans-serif;
-  }
-</style>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+ <meta charset="UTF-8">
+ <title>micro:bit 明るさデータ Viewer</title>
+ <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+ <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
-<h1>部屋の明暗表示</h1>
-<div id="roomsContainer"></div>
-<div id="timestamp"></div>
+ <h1>Room1 の明るさデータ</h1>
+ <p id="light-value">読み込み中...</p>
 
-<script>
-// ==== Firebase 初期化 ====
-const firebaseConfig = {
-  apiKey: "AIzaSyAt9FoenejYFhDIDZg5BTYfcl0x-czJ4v4",
-  authDomain: "server-f5ca2.firebaseapp.com",
-  databaseURL: "https://server-f5ca2-default-rtdb.firebaseio.com",
-  projectId: "server-f5ca2",
-  storageBucket: "server-f5ca2.firebasestorage.app",
-  messagingSenderId: "911418656641",
-  appId: "1:911418656641:web:00d6d168eba14ebf984a80",
-};
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
 
-const container = document.getElementById('roomsContainer');
-const tsDiv = document.getElementById('timestamp');
+ <script>
+   // Firebase 設定（あなたの Firebase 設定に置き換えてください）
+   const firebaseConfig = {
+     apiKey: "AIzaSyAt9FoenejYFhDIDZg5BTYfcl0x-czJ4v4",
+     authDomain: "server-f5ca2.firebaseapp.com",
+     databaseURL: "https://server-f5ca2-default-rtdb.firebaseio.com",
+     projectId: "server-f5ca2",
+     storageBucket: "server-f5ca2.appspot.com",
+     messagingSenderId: "911418656641",
+     appId: "1:911418656641:web:00d6d168eba14ebf984a80",
+     measurementId: "G-DSE6BC8WEF"
+   };
 
-// 最新データ監視
-database.ref('rooms/latest').on('value', snapshot => {
-  container.innerHTML = ''; // 前の表示をクリア
-  const data = snapshot.val();
-  if (!data) return;
 
-  // タイムスタンプをまとめて表示
-  if (data.timestamp) {
-    const timestamp = new Date(data.timestamp);
-    tsDiv.textContent = "更新日時: " + timestamp.toLocaleString();
-  } else {
-    tsDiv.textContent = "";
-  }
+   // Firebase 初期化
+   firebase.initializeApp(firebaseConfig);
 
-  for (let i = 1; i <= 18; i++) {
-    const roomKey = "room" + i;
-    const val = data[roomKey];
 
-    const div = document.createElement('div');
-    div.classList.add('room');
-
-    // 状態に応じて色と文字
-    let statusText;
-    if (val === 1) {
-      div.classList.add('bright');
-      statusText = "明るい";
-    } else if (val === 2) {
-      div.classList.add('dark');
-      statusText = "暗い";
-    } else {
-      div.classList.add('other');
-      statusText = val;
-    }
-
-    const roomNumber = document.createElement('div');
-    roomNumber.classList.add('room-number');
-    roomNumber.textContent = roomKey;
-
-    const roomStatus = document.createElement('div');
-    roomStatus.classList.add('room-status');
-    roomStatus.textContent = statusText;
-
-    div.appendChild(roomNumber);
-    div.appendChild(roomStatus);
-    container.appendChild(div);
-  }
-});
-</script>
+   // データ取得と表示
+   const lightValueElement = document.getElementById('light-value');
+   const roomRef = firebase.database().ref('light/room1');
+   roomRef.on('value', (snapshot) => {
+     const data = snapshot.val();
+     if (data) {
+       lightValueElement.textContent = `明るさ: ${data.value} lx (更新日時: ${new Date(data.timestamp).toLocaleString()})`;
+     } else {
+       lightValueElement.textContent = 'データが存在しません';
+     }
+   });
+ </script>
 </body>
 </html>
