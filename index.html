@@ -40,8 +40,7 @@
   /* 操作エリア */
   .controls { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: center; gap: 15px; align-items: center; flex-wrap: wrap; }
   select, input { padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
-  button { padding: 9px 20px; font-size: 16px; cursor: pointer; background: #2196F3; color: white; border: none; border-radius: 4px; transition: background 0.2s; }
-  button:hover { background: #1976D2; }
+  /* ボタンは不要になったのでスタイル削除 */
 
   /* グラフエリア */
   .chart-wrapper { position: relative; height: 250px; width: 100%; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
@@ -66,10 +65,9 @@
   <div id="history" class="view-section">
     <h3>Daily History (08:00 - 19:00)</h3>
     <div class="controls">
-      <label>Date: <input type="date" id="datePicker"></label>
-      <label>Target: <select id="roomPicker"></select></label>
-      <button onclick="loadHistory()">Display Graph</button>
-    </div>
+      <label>Date: <input type="date" id="datePicker" onchange="loadHistory()"></label>
+      <label>Target: <select id="roomPicker" onchange="loadHistory()"></select></label>
+      </div>
     
     <div class="chart-wrapper">
       <canvas id="historyChart"></canvas>
@@ -137,111 +135,120 @@ database.ref('rooms/latest').on('value', (snapshot) => {
 });
 
 
-// ==== History Graph ====
+// ==== History Graph (Auto Update) ====
 let myChart = null;
+let currentHistoryRef = null; // 監視中の参照を保持
 
-async function loadHistory() {
+function loadHistory() {
     const dateVal = document.getElementById('datePicker').value;
     const roomVal = document.getElementById('roomPicker').value;
     
-    if (!dateVal) return alert("日付を選択してください");
+    if (!dateVal) return; // 日付未選択なら何もしない
 
-    const snapshot = await database.ref('rooms/history/' + dateVal).once('value');
-    const data = snapshot.val();
-    
-    if (!data) {
-        if(myChart) myChart.destroy();
-        alert("No data found for this date.");
-        return;
+    // 以前の監視があれば解除（これがないと、日付を変えても古い日付の更新を受け取ってしまう）
+    if (currentHistoryRef) {
+        currentHistoryRef.off();
     }
 
-    const minTime = new Date(`${dateVal}T08:00:00`).getTime();
-    const maxTime = new Date(`${dateVal}T19:00:00`).getTime();
-
-    const records = Object.values(data).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    const plotData = [];
-    const barColors = [];
-
-    records.forEach(rec => {
-        const t = rec.timestamp;
-        const val = rec["room" + roomVal];
+    // リアルタイム監視を開始 (.on を使用)
+    currentHistoryRef = database.ref('rooms/history/' + dateVal);
+    currentHistoryRef.on('value', (snapshot) => {
+        const data = snapshot.val();
         
-        let color = '#ddd';
-        let isValid = false;
+        // データ取得後にグラフ用データを作成
+        const plotData = [];
+        const barColors = [];
+        const minTime = new Date(`${dateVal}T08:00:00`).getTime();
+        const maxTime = new Date(`${dateVal}T19:00:00`).getTime();
 
-        if (val === 1) {
-            color = '#4CAF50'; // 緑
-            isValid = true;
-        } else if (val === 2) {
-            color = '#212121'; // 黒
-            isValid = true;
-        }
+        if (data) {
+            const records = Object.values(data).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-        if (isValid) {
-            plotData.push({ x: t, y: 1 });
-            barColors.push(color);
-        }
-    });
+            records.forEach(rec => {
+                const t = rec.timestamp;
+                const val = rec["room" + roomVal];
+                
+                let color = '#ddd';
+                let isValid = false;
 
-    const ctx = document.getElementById('historyChart').getContext('2d');
-    if (myChart) myChart.destroy();
-
-    myChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            datasets: [{
-                label: `Room ${roomVal}`,
-                data: plotData,
-                backgroundColor: barColors,
-                barPercentage: 1.0, 
-                categoryPercentage: 1.0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            scales: {
-                y: {
-                    display: false, 
-                    min: 0, 
-                    max: 1 
-                },
-                x: {
-                    type: 'time',
-                    min: minTime, 
-                    max: maxTime, 
-                    time: {
-                        unit: 'hour',
-                        displayFormats: { hour: 'HH:mm' },
-                        tooltipFormat: 'HH:mm:ss'
-                    },
-                    grid: {
-                        display: true,
-                        drawBorder: false
-                    }
+                if (val === 1) {
+                    color = '#4CAF50'; 
+                    isValid = true;
+                } else if (val === 2) {
+                    color = '#212121'; 
+                    isValid = true;
                 }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        title: function(context) {
-                            const date = new Date(context[0].parsed.x);
-                            return date.toLocaleTimeString('ja-JP');
-                        },
-                        label: function(context) {
-                            const idx = context.dataIndex;
-                            const color = context.dataset.backgroundColor[idx];
-                            
-                            if (color === '#4CAF50') return 'Status: 明るい (ON)';
-                            if (color === '#212121') return 'Status: 暗い (OFF)';
-                            return 'Unknown';
+
+                if (isValid) {
+                    plotData.push({ x: t, y: 1 });
+                    barColors.push(color);
+                }
+            });
+        }
+
+        // グラフの描画または更新
+        const ctx = document.getElementById('historyChart').getContext('2d');
+
+        if (myChart) {
+            // 既にグラフがある場合はデータだけ差し替えて更新
+            myChart.data.datasets[0].label = `Room ${roomVal}`;
+            myChart.data.datasets[0].data = plotData;
+            myChart.data.datasets[0].backgroundColor = barColors;
+            // 日付が変わっている可能性があるのでX軸範囲も更新
+            myChart.options.scales.x.min = minTime;
+            myChart.options.scales.x.max = maxTime;
+            myChart.update();
+        } else {
+            // 初回作成
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    datasets: [{
+                        label: `Room ${roomVal}`,
+                        data: plotData,
+                        backgroundColor: barColors,
+                        barPercentage: 1.0, 
+                        categoryPercentage: 1.0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        y: { display: false, min: 0, max: 1 },
+                        x: {
+                            type: 'time',
+                            min: minTime, 
+                            max: maxTime, 
+                            time: {
+                                unit: 'hour',
+                                displayFormats: { hour: 'HH:mm' },
+                                tooltipFormat: 'HH:mm:ss'
+                            },
+                            grid: { display: true, drawBorder: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    const date = new Date(context[0].parsed.x);
+                                    return date.toLocaleTimeString('ja-JP');
+                                },
+                                label: function(context) {
+                                    const idx = context.dataIndex;
+                                    const color = context.dataset.backgroundColor[idx];
+                                    if (color === '#4CAF50') return 'Status: 明るい (ON)';
+                                    if (color === '#212121') return 'Status: 暗い (OFF)';
+                                    return 'Unknown';
+                                }
+                            }
                         }
                     }
                 }
-            }
+            });
         }
     });
 }
@@ -252,6 +259,11 @@ function switchTab(mode) {
     
     document.querySelector(`.tab[onclick="switchTab('${mode}')"]`).classList.add('active');
     document.getElementById(mode).classList.add('active');
+
+    // Historyタブが開かれたら、すぐにデータ読み込みを開始
+    if (mode === 'history') {
+        loadHistory();
+    }
 }
 </script>
 </body>
