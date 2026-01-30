@@ -2,108 +2,224 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>部屋の明暗表示</title>
-<style>
-  .room {
-    display: inline-block;
-    width: 80px;
-    height: 80px;
-    margin: 5px;
-    text-align: center;
-    font-family: sans-serif;
-    border-radius: 5px;
-    color: white;
-    vertical-align: top;
-    padding-top: 10px;
-  }
-  .bright { background-color: green; }
-  .dark { background-color: black; }
-  .other { background-color: gray; }
-  .room-number {
-    font-weight: bold;
-    margin-bottom: 5px;
-  }
-  .room-status {
-    font-weight: bold;
-  }
-  #timestamp {
-    margin-top: 10px;
-    font-size: 14px;
-    font-family: sans-serif;
-  }
-</style>
+<title>Room Data Viewer (Realtime & History)</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { font-family: sans-serif; background: #f4f4f9; padding: 20px; text-align: center; }
+  .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+  
+  /* タブのスタイル */
+  .tabs { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+  .tab { padding: 10px 20px; cursor: pointer; font-weight: bold; color: #666; }
+  .tab.active { color: #2196F3; border-bottom: 3px solid #2196F3; }
+  .view-section { display: none; }
+  .view-section.active { display: block; }
+  
+  /* 部屋パネルのスタイル */
+  #roomsContainer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  .room {
+    width: 80px;
+    height: 80px;
+    text-align: center;
+    border-radius: 8px;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+  }
+  .room:hover { transform: scale(1.05); }
+  
+  /* 色定義 */
+  .bright { background-color: #4CAF50; } /* 緑 */
+  .dark { background-color: #212121; }   /* 黒 */
+  .other { background-color: #9E9E9E; }  /* グレー */
+  
+  .room-number { font-size: 14px; margin-bottom: 5px; opacity: 0.9; }
+  .room-status { font-weight: bold; font-size: 16px; }
+
+  /* 履歴用スタイル */
+  input[type="date"] { padding: 8px; font-size: 16px; margin-bottom: 10px; }
+  canvas { max-height: 500px; }
+</style>
 </head>
 <body>
-<h1>部屋の明暗表示</h1>
-<div id="roomsContainer"></div>
-<div id="timestamp"></div>
+
+<div class="container">
+  <h1>Lighting Condition Monitor</h1>
+  
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('realtime')">Realtime Status</div>
+    <div class="tab" onclick="switchTab('history')">Daily History</div>
+  </div>
+
+  <div id="realtime" class="view-section active">
+    <h3>Current Status</h3>
+    <div id="roomsContainer">
+      </div>
+    <p id="realtimeUpdate">Waiting for data...</p>
+  </div>
+
+  <div id="history" class="view-section">
+    <h3>Daily History</h3>
+    <input type="date" id="datePicker">
+    <button onclick="loadHistory()">Load Data</button>
+    <canvas id="historyChart"></canvas>
+  </div>
+</div>
 
 <script>
-// ==== Firebase 初期化 ====
+// ==== Firebase 設定 ====
 const firebaseConfig = {
   apiKey: "AIzaSyAt9FoenejYFhDIDZg5BTYfcl0x-czJ4v4",
   authDomain: "server-f5ca2.firebaseapp.com",
   databaseURL: "https://server-f5ca2-default-rtdb.firebaseio.com",
   projectId: "server-f5ca2",
-  storageBucket: "server-f5ca2.firebasestorage.app",
+  storageBucket: "server-f5ca2.appspot.com",
   messagingSenderId: "911418656641",
   appId: "1:911418656641:web:00d6d168eba14ebf984a80",
 };
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
-const container = document.getElementById('roomsContainer');
-const tsDiv = document.getElementById('timestamp');
+// ==== リアルタイム表示ロジック (パネル生成) ====
+const roomsContainer = document.getElementById('roomsContainer');
+const updateText = document.getElementById('realtimeUpdate');
 
-// 最新データ監視
-database.ref('rooms/latest').on('value', snapshot => {
-  container.innerHTML = ''; // 前の表示をクリア
-  const data = snapshot.val();
-  if (!data) return;
+database.ref('rooms/latest').on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
 
-  // タイムスタンプをまとめて表示
-  if (data.timestamp) {
-    const timestamp = new Date(data.timestamp);
-    tsDiv.textContent = "更新日時: " + timestamp.toLocaleString();
-  } else {
-    tsDiv.textContent = "";
-  }
+    // 表示リセット
+    roomsContainer.innerHTML = '';
 
-  for (let i = 1; i <= 18; i++) {
-    const roomKey = "room" + i;
-    const val = data[roomKey];
+    // 18部屋分のループ処理
+    for (let i = 1; i <= 18; i++) {
+        const val = data["room" + i];
+        
+        // 要素作成
+        const div = document.createElement('div');
+        div.classList.add('room');
 
-    const div = document.createElement('div');
-    div.classList.add('room');
+        let statusText = "";
+        
+        // 色とテキストの判定
+        if (val === 1) {
+            div.classList.add('bright');
+            statusText = "明るい";
+        } else if (val === 2) {
+            div.classList.add('dark');
+            statusText = "暗い";
+        } else {
+            div.classList.add('other');
+            statusText = val ?? "-"; // データがない場合はハイフン
+        }
 
-    // 状態に応じて色と文字
-    let statusText;
-    if (val === 1) {
-      div.classList.add('bright');
-      statusText = "明るい";
-    } else if (val === 2) {
-      div.classList.add('dark');
-      statusText = "暗い";
-    } else {
-      div.classList.add('other');
-      statusText = val;
+        // HTML組み立て
+        div.innerHTML = `
+            <div class="room-number">Room ${i}</div>
+            <div class="room-status">${statusText}</div>
+        `;
+        
+        roomsContainer.appendChild(div);
+    }
+    
+    // 日付フォーマット変更 (yyyy/mm/dd HH:mm:ss)
+    const d = new Date(data.timestamp);
+    if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = ('0' + (d.getMonth() + 1)).slice(-2);
+        const day = ('0' + d.getDate()).slice(-2);
+        const hour = ('0' + d.getHours()).slice(-2);
+        const min = ('0' + d.getMinutes()).slice(-2);
+        const sec = ('0' + d.getSeconds()).slice(-2);
+        
+        const formattedTime = `${year}/${month}/${day} ${hour}:${min}:${sec}`;
+        updateText.textContent = "Last Update: " + formattedTime;
+    }
+});
+
+
+// ==== 履歴用チャート (折れ線グラフ) ====
+const histCtx = document.getElementById('historyChart').getContext('2d');
+const historyChart = new Chart(histCtx, {
+    type: 'line',
+    data: { labels: [], datasets: [] },
+    options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        elements: { point: { radius: 0 } },
+        scales: { y: { beginAtZero: true, max: 255 } } // 必要に応じてmaxを調整してください（1と2しか出ないならmax:3等でも可）
+    }
+});
+
+// 履歴データの読み込み
+async function loadHistory() {
+    const dateVal = document.getElementById('datePicker').value;
+    if (!dateVal) return alert("Please select a date.");
+
+    // データ取得
+    const snapshot = await database.ref('rooms/history/' + dateVal).once('value');
+    const data = snapshot.val();
+    
+    if (!data) {
+        historyChart.data.labels = [];
+        historyChart.data.datasets = [];
+        historyChart.update();
+        return alert("No data found for this date.");
     }
 
-    const roomNumber = document.createElement('div');
-    roomNumber.classList.add('room-number');
-    roomNumber.textContent = roomKey;
+    // データ整形
+    const timestamps = [];
+    const roomData = Array.from({length: 18}, () => []);
 
-    const roomStatus = document.createElement('div');
-    roomStatus.classList.add('room-status');
-    roomStatus.textContent = statusText;
+    Object.values(data).forEach(record => {
+        timestamps.push(new Date(record.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+        for (let i = 1; i <= 18; i++) {
+            roomData[i-1].push(record["room" + i]);
+        }
+    });
 
-    div.appendChild(roomNumber);
-    div.appendChild(roomStatus);
-    container.appendChild(div);
-  }
-});
+    // データセット作成
+    const datasets = roomData.map((data, index) => ({
+        label: `Room ${index + 1}`,
+        data: data,
+        borderColor: `hsl(${index * 20}, 70%, 50%)`, // 色を部屋ごとに少しずらす
+        borderWidth: 1,
+        fill: false,
+        hidden: index > 2 
+    }));
+
+    historyChart.data.labels = timestamps;
+    historyChart.data.datasets = datasets;
+    historyChart.update();
+}
+
+// ==== UI制御 ====
+document.getElementById('datePicker').valueAsDate = new Date();
+
+function switchTab(mode) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+    
+    const activeTab = document.querySelector(`.tab[onclick="switchTab('${mode}')"]`);
+    const activeSection = document.getElementById(mode);
+    
+    if (activeTab) activeTab.classList.add('active');
+    if (activeSection) activeSection.classList.add('active');
+
+    if(mode === 'history') loadHistory();
+}
 </script>
 </body>
 </html>
