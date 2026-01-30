@@ -2,55 +2,48 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Room Data Viewer (Realtime & History)</title>
+<title>Room Data Viewer</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-  body { font-family: sans-serif; background: #f4f4f9; padding: 20px; text-align: center; }
-  .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; background: #f0f2f5; padding: 20px; text-align: center; color: #333; }
+  .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
   
-  /* タブのスタイル */
-  .tabs { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
-  .tab { padding: 10px 20px; cursor: pointer; font-weight: bold; color: #666; }
+  .tabs { display: flex; justify-content: center; margin-bottom: 25px; border-bottom: 2px solid #eee; }
+  .tab { padding: 12px 30px; cursor: pointer; font-weight: bold; color: #888; transition: all 0.3s; }
+  .tab:hover { color: #2196F3; background: #f9f9f9; }
   .tab.active { color: #2196F3; border-bottom: 3px solid #2196F3; }
-  .view-section { display: none; }
-  .view-section.active { display: block; }
   
-  /* 部屋パネルのスタイル */
-  #roomsContainer {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 15px;
-  }
-  .room {
-    width: 80px;
-    height: 80px;
-    text-align: center;
-    border-radius: 8px;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  .view-section { display: none; animation: fadeIn 0.4s ease; }
+  .view-section.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  
+  /* リアルタイムパネル */
+  #roomsContainer { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 20px; }
+  .room { 
+    width: 70px; height: 70px; 
+    border-radius: 10px; color: white; 
+    display: flex; flex-direction: column; justify-content: center; align-items: center; 
+    box-shadow: 0 3px 6px rgba(0,0,0,0.15); 
+    font-size: 13px; font-weight: bold;
     transition: transform 0.2s;
   }
   .room:hover { transform: scale(1.05); }
   
-  /* 色定義 */
-  .bright { background-color: #4CAF50; } /* 緑 */
-  .dark { background-color: #212121; }   /* 黒 */
-  .other { background-color: #9E9E9E; }  /* グレー */
+  .bright { background-color: #4CAF50; box-shadow: 0 0 10px rgba(76, 175, 80, 0.6); }
+  .dark { background-color: #212121; }
+  .other { background-color: #cfd8dc; color: #555; }
   
-  .room-number { font-size: 14px; margin-bottom: 5px; opacity: 0.9; }
-  .room-status { font-weight: bold; font-size: 16px; }
+  /* 操作エリア */
+  .controls { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: center; gap: 15px; align-items: center; flex-wrap: wrap; }
+  select, input { padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+  button { padding: 9px 20px; font-size: 16px; cursor: pointer; background: #2196F3; color: white; border: none; border-radius: 4px; transition: background 0.2s; }
+  button:hover { background: #1976D2; }
 
-  /* 履歴用スタイル */
-  input[type="date"] { padding: 8px; font-size: 16px; margin-bottom: 10px; }
-  canvas { max-height: 500px; }
+  /* グラフ */
+  .chart-wrapper { position: relative; height: 400px; width: 100%; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -60,26 +53,31 @@
   
   <div class="tabs">
     <div class="tab active" onclick="switchTab('realtime')">Realtime Status</div>
-    <div class="tab" onclick="switchTab('history')">Daily History</div>
+    <div class="tab" onclick="switchTab('history')">Room History Graph</div>
   </div>
 
   <div id="realtime" class="view-section active">
     <h3>Current Status</h3>
-    <div id="roomsContainer">
-      </div>
-    <p id="realtimeUpdate">Waiting for data...</p>
+    <div id="roomsContainer"></div>
+    <p id="realtimeUpdate" style="color:#666; font-size: 0.9em;">Waiting for data...</p>
   </div>
 
   <div id="history" class="view-section">
     <h3>Daily History</h3>
-    <input type="date" id="datePicker">
-    <button onclick="loadHistory()">Load Data</button>
-    <canvas id="historyChart"></canvas>
+    <div class="controls">
+      <label>Date: <input type="date" id="datePicker"></label>
+      <label>Target: <select id="roomPicker"></select></label>
+      <button onclick="loadHistory()">Display Graph</button>
+    </div>
+    
+    <div class="chart-wrapper">
+      <canvas id="historyChart"></canvas>
+    </div>
   </div>
 </div>
 
 <script>
-// ==== Firebase 設定 ====
+// ==== Firebase Config ====
 const firebaseConfig = {
   apiKey: "AIzaSyAt9FoenejYFhDIDZg5BTYfcl0x-czJ4v4",
   authDomain: "server-f5ca2.firebaseapp.com",
@@ -92,7 +90,17 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
-// ==== リアルタイム表示ロジック (パネル生成) ====
+// ==== Init ====
+const roomPicker = document.getElementById('roomPicker');
+for(let i=1; i<=18; i++){
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.innerText = "Room " + i;
+    roomPicker.appendChild(opt);
+}
+document.getElementById('datePicker').valueAsDate = new Date();
+
+// ==== Realtime ====
 const roomsContainer = document.getElementById('roomsContainer');
 const updateText = document.getElementById('realtimeUpdate');
 
@@ -100,125 +108,131 @@ database.ref('rooms/latest').on('value', (snapshot) => {
     const data = snapshot.val();
     if (!data) return;
 
-    // 表示リセット
     roomsContainer.innerHTML = '';
-
-    // 18部屋分のループ処理
     for (let i = 1; i <= 18; i++) {
         const val = data["room" + i];
-        
-        // 要素作成
         const div = document.createElement('div');
         div.classList.add('room');
 
-        let statusText = "";
-        
-        // 色とテキストの判定
+        let statusText = "?";
         if (val === 1) {
             div.classList.add('bright');
-            statusText = "明るい";
+            statusText = "ON";
         } else if (val === 2) {
             div.classList.add('dark');
-            statusText = "暗い";
+            statusText = "OFF";
         } else {
             div.classList.add('other');
-            statusText = val ?? "-"; // データがない場合はハイフン
+            statusText = "-";
         }
-
-        // HTML組み立て
-        div.innerHTML = `
-            <div class="room-number">Room ${i}</div>
-            <div class="room-status">${statusText}</div>
-        `;
-        
+        div.innerHTML = `<div>R${i}</div><div style="font-size:18px;">${statusText}</div>`;
         roomsContainer.appendChild(div);
     }
     
-    // 日付フォーマット変更 (yyyy/mm/dd HH:mm:ss)
     const d = new Date(data.timestamp);
     if (!isNaN(d.getTime())) {
-        const year = d.getFullYear();
-        const month = ('0' + (d.getMonth() + 1)).slice(-2);
-        const day = ('0' + d.getDate()).slice(-2);
-        const hour = ('0' + d.getHours()).slice(-2);
-        const min = ('0' + d.getMinutes()).slice(-2);
-        const sec = ('0' + d.getSeconds()).slice(-2);
-        
-        const formattedTime = `${year}/${month}/${day} ${hour}:${min}:${sec}`;
-        updateText.textContent = "Last Update: " + formattedTime;
+        updateText.textContent = "Last Update: " + d.toLocaleString('ja-JP');
     }
 });
 
 
-// ==== 履歴用チャート (折れ線グラフ) ====
-const histCtx = document.getElementById('historyChart').getContext('2d');
-const historyChart = new Chart(histCtx, {
-    type: 'line',
-    data: { labels: [], datasets: [] },
-    options: {
-        responsive: true,
-        interaction: { mode: 'index', intersect: false },
-        elements: { point: { radius: 0 } },
-        scales: { y: { beginAtZero: true, max: 255 } } // 必要に応じてmaxを調整してください（1と2しか出ないならmax:3等でも可）
-    }
-});
+// ==== History Graph ====
+let myChart = null;
 
-// 履歴データの読み込み
 async function loadHistory() {
     const dateVal = document.getElementById('datePicker').value;
-    if (!dateVal) return alert("Please select a date.");
+    const roomVal = document.getElementById('roomPicker').value;
+    
+    if (!dateVal) return alert("日付を選択してください");
 
-    // データ取得
     const snapshot = await database.ref('rooms/history/' + dateVal).once('value');
     const data = snapshot.val();
     
     if (!data) {
-        historyChart.data.labels = [];
-        historyChart.data.datasets = [];
-        historyChart.update();
-        return alert("No data found for this date.");
+        if(myChart) myChart.destroy();
+        alert("No data found for this date.");
+        return;
     }
 
-    // データ整形
-    const timestamps = [];
-    const roomData = Array.from({length: 18}, () => []);
+    const records = Object.values(data).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    Object.values(data).forEach(record => {
-        timestamps.push(new Date(record.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-        for (let i = 1; i <= 18; i++) {
-            roomData[i-1].push(record["room" + i]);
+    const labels = [];
+    const plotData = [];
+    const barColors = [];
+
+    records.forEach(rec => {
+        const t = new Date(rec.timestamp);
+        const timeStr = t.toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+        const val = rec["room" + roomVal];
+
+        labels.push(timeStr);
+
+        // 1(明るい) -> 2(高い緑), 2(暗い) -> 1(低い黒)
+        if (val === 1) {
+            plotData.push(2); 
+            barColors.push('#4CAF50');
+        } else if (val === 2) {
+            plotData.push(1); 
+            barColors.push('#212121');
+        } else {
+            plotData.push(0); 
+            barColors.push('#ddd');
         }
     });
 
-    // データセット作成
-    const datasets = roomData.map((data, index) => ({
-        label: `Room ${index + 1}`,
-        data: data,
-        borderColor: `hsl(${index * 20}, 70%, 50%)`, // 色を部屋ごとに少しずらす
-        borderWidth: 1,
-        fill: false,
-        hidden: index > 2 
-    }));
+    const ctx = document.getElementById('historyChart').getContext('2d');
+    if (myChart) myChart.destroy();
 
-    historyChart.data.labels = timestamps;
-    historyChart.data.datasets = datasets;
-    historyChart.update();
+    myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: `Room ${roomVal} Status`,
+                data: plotData,
+                backgroundColor: barColors,
+                barPercentage: 1.0,
+                categoryPercentage: 1.0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                y: {
+                    beginAtZero: true, max: 2.5,
+                    ticks: {
+                        callback: function(val) {
+                            if(val === 2) return 'Bright (ON)';
+                            if(val === 1) return 'Dark (OFF)';
+                            return '';
+                        },
+                        font: { weight: 'bold', size: 12 }
+                    }
+                },
+                x: {
+                    ticks: { autoSkip: true, maxTicksLimit: 20 }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ctx.raw === 2 ? 'Status: 明るい' : (ctx.raw === 1 ? 'Status: 暗い' : 'Unknown')
+                    }
+                }
+            }
+        }
+    });
 }
-
-// ==== UI制御 ====
-document.getElementById('datePicker').valueAsDate = new Date();
 
 function switchTab(mode) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
     
-    const activeTab = document.querySelector(`.tab[onclick="switchTab('${mode}')"]`);
-    const activeSection = document.getElementById(mode);
-    
-    if (activeTab) activeTab.classList.add('active');
-    if (activeSection) activeSection.classList.add('active');
-
-    if(mode === 'history') loadHistory();
+    document.querySelector(`.tab[onclick="switchTab('${mode}')"]`).classList.add('active');
+    document.getElementById(mode).classList.add('active');
 }
 </script>
 </body>
