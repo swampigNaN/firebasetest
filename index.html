@@ -2,10 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Room Data Viewer</title>
+<title>Room Data Viewer (Timeline)</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 <style>
   body { font-family: "Helvetica Neue", Arial, sans-serif; background: #f0f2f5; padding: 20px; text-align: center; color: #333; }
@@ -42,8 +43,8 @@
   button { padding: 9px 20px; font-size: 16px; cursor: pointer; background: #2196F3; color: white; border: none; border-radius: 4px; transition: background 0.2s; }
   button:hover { background: #1976D2; }
 
-  /* グラフ */
-  .chart-wrapper { position: relative; height: 400px; width: 100%; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
+  /* グラフエリア */
+  .chart-wrapper { position: relative; height: 250px; width: 100%; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -63,7 +64,7 @@
   </div>
 
   <div id="history" class="view-section">
-    <h3>Daily History</h3>
+    <h3>Daily History (08:00 - 19:00)</h3>
     <div class="controls">
       <label>Date: <input type="date" id="datePicker"></label>
       <label>Target: <select id="roomPicker"></select></label>
@@ -154,29 +155,32 @@ async function loadHistory() {
         return;
     }
 
+    const minTime = new Date(`${dateVal}T08:00:00`).getTime();
+    const maxTime = new Date(`${dateVal}T19:00:00`).getTime();
+
     const records = Object.values(data).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-    const labels = [];
     const plotData = [];
     const barColors = [];
 
     records.forEach(rec => {
-        const t = new Date(rec.timestamp);
-        const timeStr = t.toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+        const t = rec.timestamp;
         const val = rec["room" + roomVal];
+        
+        let color = '#ddd';
+        let isValid = false;
 
-        labels.push(timeStr);
-
-        // 1(明るい) -> 2(高い緑), 2(暗い) -> 1(低い黒)
         if (val === 1) {
-            plotData.push(2); 
-            barColors.push('#4CAF50');
+            color = '#4CAF50'; // 緑
+            isValid = true;
         } else if (val === 2) {
-            plotData.push(1); 
-            barColors.push('#212121');
-        } else {
-            plotData.push(0); 
-            barColors.push('#ddd');
+            color = '#212121'; // 黒
+            isValid = true;
+        }
+
+        if (isValid) {
+            plotData.push({ x: t, y: 1 });
+            barColors.push(color);
         }
     });
 
@@ -186,12 +190,11 @@ async function loadHistory() {
     myChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: labels,
             datasets: [{
-                label: `Room ${roomVal} Status`,
+                label: `Room ${roomVal}`,
                 data: plotData,
                 backgroundColor: barColors,
-                barPercentage: 1.0,
+                barPercentage: 1.0, 
                 categoryPercentage: 1.0
             }]
         },
@@ -201,25 +204,41 @@ async function loadHistory() {
             animation: false,
             scales: {
                 y: {
-                    beginAtZero: true, max: 2.5,
-                    ticks: {
-                        callback: function(val) {
-                            if(val === 2) return 'Bright (ON)';
-                            if(val === 1) return 'Dark (OFF)';
-                            return '';
-                        },
-                        font: { weight: 'bold', size: 12 }
-                    }
+                    display: false, 
+                    min: 0, 
+                    max: 1 
                 },
                 x: {
-                    ticks: { autoSkip: true, maxTicksLimit: 20 }
+                    type: 'time',
+                    min: minTime, 
+                    max: maxTime, 
+                    time: {
+                        unit: 'hour',
+                        displayFormats: { hour: 'HH:mm' },
+                        tooltipFormat: 'HH:mm:ss'
+                    },
+                    grid: {
+                        display: true,
+                        drawBorder: false
+                    }
                 }
             },
             plugins: {
                 legend: { display: false },
                 tooltip: {
                     callbacks: {
-                        label: ctx => ctx.raw === 2 ? 'Status: 明るい' : (ctx.raw === 1 ? 'Status: 暗い' : 'Unknown')
+                        title: function(context) {
+                            const date = new Date(context[0].parsed.x);
+                            return date.toLocaleTimeString('ja-JP');
+                        },
+                        label: function(context) {
+                            const idx = context.dataIndex;
+                            const color = context.dataset.backgroundColor[idx];
+                            
+                            if (color === '#4CAF50') return 'Status: 明るい (ON)';
+                            if (color === '#212121') return 'Status: 暗い (OFF)';
+                            return 'Unknown';
+                        }
                     }
                 }
             }
