@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Room Data Viewer (Timeline)</title>
+<title>Room Data Viewer (Auto-Trigger)</title>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -12,7 +12,6 @@
 
 <style>
   /** * Global Styles 
-   * Reset box-sizing for consistent layout 
    */
   * { box-sizing: border-box; }
   body { 
@@ -83,7 +82,7 @@
   .dark { background-color: #212121; }
   .other { background-color: #cfd8dc; color: #555; }
   
-  /* Controls Area */
+  /* Controls Area (Button removed) */
   .controls { 
     background: #f8f9fa; 
     padding: 15px; 
@@ -91,17 +90,32 @@
     margin-bottom: 20px; 
     display: flex; 
     justify-content: center; 
-    gap: 10px; 
+    gap: 20px; /* Increased gap for better touch targets */
     align-items: center; 
     flex-wrap: wrap; 
   }
-  select, input { padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
-  button { 
-    padding: 10px 20px; font-size: 16px; cursor: pointer; 
-    background: #2196F3; color: white; border: none; border-radius: 6px; 
-    transition: background 0.2s; font-weight: bold;
+  
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
   }
-  button:hover { background-color: #1976D2; }
+  
+  .control-label {
+    font-size: 0.85rem;
+    color: #666;
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+
+  select, input { 
+    padding: 10px; 
+    font-size: 16px; 
+    border: 1px solid #ccc; 
+    border-radius: 6px; 
+    background: #fff;
+    min-width: 150px; /* Ensure sufficient width */
+  }
   
   /* Chart Container */
   .chart-wrapper { 
@@ -113,11 +127,11 @@
     border-radius: 8px; 
   }
 
-  /* Responsive Design: Mobile breakpoint */
+  /* Responsive Design */
   @media (max-width: 600px) {
-    .controls { flex-direction: column; align-items: stretch; }
-    .controls label { display: flex; flex-direction: column; text-align: left; font-size: 0.85rem; color: #666; margin-bottom: 5px; }
-    select, input, button { width: 100%; margin-bottom: 5px; }
+    .controls { flex-direction: column; align-items: stretch; gap: 10px; }
+    .control-group { width: 100%; }
+    select, input { width: 100%; }
   }
 </style>
 </head>
@@ -139,14 +153,17 @@
 
   <div id="history" class="view-section">
     <h3>Daily History (Live)</h3>
+    
     <div class="controls">
-      <label>Date
-        <input type="date" id="datePicker">
-      </label>
-      <label>Target Room
-        <select id="roomPicker"></select>
-      </label>
-      <button onclick="startHistoryMonitor()">Start Monitoring</button>
+      <div class="control-group">
+        <span class="control-label">Date</span>
+        <input type="date" id="datePicker" onchange="startHistoryMonitor()">
+      </div>
+      
+      <div class="control-group">
+        <span class="control-label">Target Room</span>
+        <select id="roomPicker" onchange="startHistoryMonitor()"></select>
+      </div>
     </div>
     
     <div class="chart-wrapper">
@@ -178,15 +195,18 @@ const database = firebase.database();
  */
 const ROOM_COUNT = 18;
 let myChart = null;
-let currentHistoryRef = null; // Holds the active Firebase listener reference
+let currentHistoryRef = null; 
 
-// Initialize DOM elements
+// DOM References
 const roomPicker = document.getElementById('roomPicker');
 const roomsContainer = document.getElementById('roomsContainer');
 const updateText = document.getElementById('realtimeUpdate');
 const historyChartCtx = document.getElementById('historyChart').getContext('2d');
 
-// Populate Room Selector
+/**
+ * Initialization Logic
+ */
+// 1. Populate Room Selector
 for(let i = 1; i <= ROOM_COUNT; i++) {
     const opt = document.createElement('option');
     opt.value = i;
@@ -194,22 +214,19 @@ for(let i = 1; i <= ROOM_COUNT; i++) {
     roomPicker.appendChild(opt);
 }
 
-// Set default date to today
+// 2. Set default date to today
 document.getElementById('datePicker').valueAsDate = new Date();
 
 
 /**
  * Feature: Realtime Monitor
- * Subscribes to 'rooms/latest' for immediate status updates.
  */
 database.ref('rooms/latest').on('value', (snapshot) => {
     const data = snapshot.val();
     if (!data) return;
 
-    // Clear previous DOM elements
     roomsContainer.innerHTML = '';
 
-    // Render Room Status Cards
     for (let i = 1; i <= ROOM_COUNT; i++) {
         const val = data[`room${i}`];
         const div = document.createElement('div');
@@ -231,7 +248,6 @@ database.ref('rooms/latest').on('value', (snapshot) => {
         roomsContainer.appendChild(div);
     }
     
-    // Update timestamp label
     const d = new Date(data.timestamp);
     if (!isNaN(d.getTime())) {
         updateText.textContent = `Updated: ${d.toLocaleTimeString('ja-JP')}`;
@@ -241,50 +257,41 @@ database.ref('rooms/latest').on('value', (snapshot) => {
 
 /**
  * Feature: History Graph Monitor
- * Handles data fetching, processing, and visualization for historical data.
+ * Triggered automatically on input change.
  */
-
-// Starts monitoring a specific date/room combination
 function startHistoryMonitor() {
     const dateVal = document.getElementById('datePicker').value;
     const roomVal = document.getElementById('roomPicker').value;
     
-    if (!dateVal) {
-        alert("Please select a date.");
-        return;
-    }
+    if (!dateVal) return;
 
-    // Detach previous listener to prevent memory leaks and duplicate triggers
+    // Detach previous listener to prevent leaks/duplicates
     if (currentHistoryRef) {
         currentHistoryRef.off();
-        console.log("[Monitor] Previous listener detached.");
     }
 
     // Attach new listener
     currentHistoryRef = database.ref(`rooms/history/${dateVal}`);
-    console.log(`[Monitor] Started watching: ${dateVal} Room ${roomVal}`);
+    console.log(`[Monitor] Switched to: ${dateVal} / Room ${roomVal}`);
 
     currentHistoryRef.on('value', (snapshot) => {
         const data = snapshot.val();
         
-        // Handle empty data case
+        // Handle no data gracefully
         if (!data) {
             renderChart([], roomVal, dateVal);
             return;
         }
 
-        // Transform object to array and sort by timestamp ASC
         const records = Object.values(data).sort((a, b) => a.timestamp - b.timestamp);
         renderChart(records, roomVal, dateVal);
     });
 }
 
-// Renders or updates the Chart.js instance
 function renderChart(records, roomVal, dateVal) {
     const minTime = new Date(`${dateVal}T08:00:00`).getTime();
     const maxTime = new Date(`${dateVal}T19:00:00`).getTime();
 
-    // Map data to chart format (Timeline visualization)
     const plotData = [];
     const barColors = [];
 
@@ -296,30 +303,25 @@ function renderChart(records, roomVal, dateVal) {
         let isValid = false;
 
         if (val === 1) {
-            color = '#4CAF50'; // Green for ON
+            color = '#4CAF50'; 
             isValid = true;
         } else if (val === 2) {
-            color = '#212121'; // Dark for OFF
+            color = '#212121'; 
             isValid = true;
         }
 
-        // We use a fixed height bar (y=1) to create a barcode-like timeline
         if (isValid) {
             plotData.push({ x: t, y: 1 });
             barColors.push(color);
         }
     });
 
-    // Update existing chart or create new instance
     if (myChart) {
         myChart.data.datasets[0].label = `Room ${roomVal}`;
         myChart.data.datasets[0].data = plotData;
         myChart.data.datasets[0].backgroundColor = barColors;
-        
-        // Update scales in case date changed
         myChart.options.scales.x.min = minTime;
         myChart.options.scales.x.max = maxTime;
-        
         myChart.update();
     } else {
         myChart = new Chart(historyChartCtx, {
@@ -336,13 +338,9 @@ function renderChart(records, roomVal, dateVal) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: false, // Disable animation for smoother realtime updates
+                animation: false, 
                 scales: {
-                    y: { 
-                        display: false, // Hide Y axis
-                        min: 0, 
-                        max: 1 
-                    },
+                    y: { display: false, min: 0, max: 1 },
                     x: {
                         type: 'time',
                         min: minTime,
@@ -359,8 +357,7 @@ function renderChart(records, roomVal, dateVal) {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        mode: 'nearest', 
-                        intersect: false,
+                        mode: 'nearest', intersect: false,
                         callbacks: {
                             title: ctx => new Date(ctx[0].parsed.x).toLocaleTimeString('ja-JP'),
                             label: ctx => {
@@ -390,6 +387,10 @@ function switchTab(mode) {
     const targetSection = document.getElementById(mode);
     if(targetSection) targetSection.classList.add('active');
 }
+
+// 3. Kickstart the monitor immediately on load
+startHistoryMonitor();
+
 </script>
 </body>
 </html>
