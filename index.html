@@ -2,18 +2,48 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Room Data Viewer (Timeline)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Room Data Viewer (Mobile Friendly)</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 <style>
-  body { font-family: "Helvetica Neue", Arial, sans-serif; background: #f0f2f5; padding: 20px; text-align: center; color: #333; }
-  .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+  /* ベーススタイル */
+  * { box-sizing: border-box; } /* 全要素のサイズ計算を統一 */
+  body { 
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif; 
+    background: #f0f2f5; 
+    padding: 10px; /* 余白を縮小 */
+    margin: 0;
+    text-align: center; 
+    color: #333; 
+  }
+
+  .container { 
+    max-width: 1000px; 
+    margin: auto; 
+    background: white; 
+    padding: 20px 15px; /* スマホ向けに内側余白を調整 */
+    border-radius: 12px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+  }
   
-  .tabs { display: flex; justify-content: center; margin-bottom: 25px; border-bottom: 2px solid #eee; }
-  .tab { padding: 12px 30px; cursor: pointer; font-weight: bold; color: #888; transition: all 0.3s; }
+  h1 { font-size: 1.5rem; margin-top: 0; margin-bottom: 20px; }
+
+  /* タブ */
+  .tabs { display: flex; justify-content: center; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+  .tab { 
+    flex: 1; /* 等幅にする */
+    padding: 12px 10px; 
+    cursor: pointer; 
+    font-weight: bold; 
+    color: #888; 
+    font-size: 0.9rem;
+    transition: all 0.3s; 
+    white-space: nowrap; /* 折り返し防止 */
+  }
   .tab:hover { color: #2196F3; background: #f9f9f9; }
   .tab.active { color: #2196F3; border-bottom: 3px solid #2196F3; }
   
@@ -21,53 +51,130 @@
   .view-section.active { display: block; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
   
-  /* リアルタイムパネル */
-  #roomsContainer { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 20px; }
+  /* リアルタイムパネル (Gridレイアウトに変更) */
+  #roomsContainer { 
+    display: grid; 
+    /* 幅60px以上のカラムを自動で敷き詰める */
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); 
+    gap: 10px; 
+    margin-bottom: 20px; 
+  }
+
   .room { 
-    width: 70px; height: 70px; 
+    aspect-ratio: 1 / 1; /* 正方形を維持 */
+    width: 100%; /* 親グリッドに合わせる */
+    height: auto;
     border-radius: 10px; color: white; 
     display: flex; flex-direction: column; justify-content: center; align-items: center; 
-    box-shadow: 0 3px 6px rgba(0,0,0,0.15); 
-    font-size: 13px; font-weight: bold;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15); 
+    font-size: 0.8rem; font-weight: bold;
     transition: transform 0.2s;
   }
-  .room:hover { transform: scale(1.05); }
-  
-  .bright { background-color: #4CAF50; box-shadow: 0 0 10px rgba(76, 175, 80, 0.6); }
+  .room-val { font-size: 1.2rem; margin-top: 2px; }
+
+  /* 色定義 */
+  .bright { background-color: #4CAF50; box-shadow: 0 0 8px rgba(76, 175, 80, 0.6); }
   .dark { background-color: #212121; }
   .other { background-color: #cfd8dc; color: #555; }
   
   /* 操作エリア */
-  .controls { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: center; gap: 15px; align-items: center; flex-wrap: wrap; }
-  select, input { padding: 8px 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
-  /* ボタンは不要になったのでスタイル削除 */
+  .controls { 
+    background: #f8f9fa; 
+    padding: 15px; 
+    border-radius: 8px; 
+    margin-bottom: 20px; 
+    display: flex; 
+    justify-content: center; 
+    gap: 10px; 
+    align-items: center; 
+    flex-wrap: wrap; 
+  }
+  
+  /* 入力フォームとボタン */
+  select, input { 
+    padding: 10px; 
+    font-size: 16px; /* 16px以上にするとiOSでズームされない */
+    border: 1px solid #ccc; 
+    border-radius: 6px; 
+    background: #fff;
+  }
+  
+  button { 
+    padding: 10px 20px; 
+    font-size: 16px; 
+    cursor: pointer; 
+    background: #2196F3; 
+    color: white; 
+    border: none; 
+    border-radius: 6px; 
+    transition: background 0.2s; 
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+  button:active { transform: translateY(1px); }
 
   /* グラフエリア */
-  .chart-wrapper { position: relative; height: 250px; width: 100%; border: 1px solid #eee; padding: 10px; border-radius: 8px; }
+  .chart-wrapper { 
+    position: relative; 
+    height: 300px; /* スマホで見やすいよう少し高く */
+    width: 100%; 
+    border: 1px solid #eee; 
+    padding: 5px; 
+    border-radius: 8px; 
+  }
+
+  /* ==== スマホ用レスポンシブ調整 ==== */
+  @media (max-width: 600px) {
+    h1 { font-size: 1.2rem; }
+    
+    .controls {
+      flex-direction: column; /* 縦積みにする */
+      align-items: stretch; /* 横幅いっぱいに広げる */
+    }
+    
+    .controls label {
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 5px;
+    }
+    
+    select, input, button {
+      width: 100%; /* 幅いっぱい */
+      margin-bottom: 5px;
+    }
+  }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <h1>Lighting Condition Monitor</h1>
+  <h1>Lighting Monitor</h1>
   
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('realtime')">Realtime Status</div>
-    <div class="tab" onclick="switchTab('history')">Room History Graph</div>
+    <div class="tab active" onclick="switchTab('realtime')">Realtime</div>
+    <div class="tab" onclick="switchTab('history')">History Graph</div>
   </div>
 
   <div id="realtime" class="view-section active">
     <h3>Current Status</h3>
     <div id="roomsContainer"></div>
-    <p id="realtimeUpdate" style="color:#666; font-size: 0.9em;">Waiting for data...</p>
+    <p id="realtimeUpdate" style="color:#666; font-size: 0.8em;">Waiting for data...</p>
   </div>
 
   <div id="history" class="view-section">
-    <h3>Daily History (08:00 - 19:00)</h3>
+    <h3>Daily History</h3>
     <div class="controls">
-      <label>Date: <input type="date" id="datePicker" onchange="loadHistory()"></label>
-      <label>Target: <select id="roomPicker" onchange="loadHistory()"></select></label>
-      </div>
+      <label>Date
+        <input type="date" id="datePicker">
+      </label>
+      <label>Target Room
+        <select id="roomPicker"></select>
+      </label>
+      <button onclick="loadHistory()">Show Graph</button>
+    </div>
     
     <div class="chart-wrapper">
       <canvas id="historyChart"></canvas>
@@ -76,7 +183,7 @@
 </div>
 
 <script>
-// ==== Firebase Config ====
+// ==== Firebase Config (変更なし) ====
 const firebaseConfig = {
   apiKey: "AIzaSyAt9FoenejYFhDIDZg5BTYfcl0x-czJ4v4",
   authDomain: "server-f5ca2.firebaseapp.com",
@@ -124,7 +231,8 @@ database.ref('rooms/latest').on('value', (snapshot) => {
             div.classList.add('other');
             statusText = "-";
         }
-        div.innerHTML = `<div>R${i}</div><div style="font-size:18px;">${statusText}</div>`;
+        // フォントサイズ調整用クラスを追加
+        div.innerHTML = `<div>R${i}</div><div class="room-val">${statusText}</div>`;
         roomsContainer.appendChild(div);
     }
     
@@ -135,120 +243,116 @@ database.ref('rooms/latest').on('value', (snapshot) => {
 });
 
 
-// ==== History Graph (Auto Update) ====
+// ==== History Graph ====
 let myChart = null;
-let currentHistoryRef = null; // 監視中の参照を保持
 
-function loadHistory() {
+async function loadHistory() {
     const dateVal = document.getElementById('datePicker').value;
     const roomVal = document.getElementById('roomPicker').value;
     
-    if (!dateVal) return; // 日付未選択なら何もしない
+    if (!dateVal) return alert("日付を選択してください");
 
-    // 以前の監視があれば解除（これがないと、日付を変えても古い日付の更新を受け取ってしまう）
-    if (currentHistoryRef) {
-        currentHistoryRef.off();
+    const snapshot = await database.ref('rooms/history/' + dateVal).once('value');
+    const data = snapshot.val();
+    
+    if (!data) {
+        if(myChart) myChart.destroy();
+        alert("No data found for this date.");
+        return;
     }
 
-    // リアルタイム監視を開始 (.on を使用)
-    currentHistoryRef = database.ref('rooms/history/' + dateVal);
-    currentHistoryRef.on('value', (snapshot) => {
-        const data = snapshot.val();
+    const minTime = new Date(`${dateVal}T08:00:00`).getTime();
+    const maxTime = new Date(`${dateVal}T19:00:00`).getTime();
+
+    const records = Object.values(data).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    const plotData = [];
+    const barColors = [];
+
+    records.forEach(rec => {
+        const t = rec.timestamp;
+        const val = rec["room" + roomVal];
         
-        // データ取得後にグラフ用データを作成
-        const plotData = [];
-        const barColors = [];
-        const minTime = new Date(`${dateVal}T08:00:00`).getTime();
-        const maxTime = new Date(`${dateVal}T19:00:00`).getTime();
+        let color = '#ddd';
+        let isValid = false;
 
-        if (data) {
-            const records = Object.values(data).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-            records.forEach(rec => {
-                const t = rec.timestamp;
-                const val = rec["room" + roomVal];
-                
-                let color = '#ddd';
-                let isValid = false;
-
-                if (val === 1) {
-                    color = '#4CAF50'; 
-                    isValid = true;
-                } else if (val === 2) {
-                    color = '#212121'; 
-                    isValid = true;
-                }
-
-                if (isValid) {
-                    plotData.push({ x: t, y: 1 });
-                    barColors.push(color);
-                }
-            });
+        if (val === 1) {
+            color = '#4CAF50'; 
+            isValid = true;
+        } else if (val === 2) {
+            color = '#212121'; 
+            isValid = true;
         }
 
-        // グラフの描画または更新
-        const ctx = document.getElementById('historyChart').getContext('2d');
+        if (isValid) {
+            plotData.push({ x: t, y: 1 });
+            barColors.push(color);
+        }
+    });
 
-        if (myChart) {
-            // 既にグラフがある場合はデータだけ差し替えて更新
-            myChart.data.datasets[0].label = `Room ${roomVal}`;
-            myChart.data.datasets[0].data = plotData;
-            myChart.data.datasets[0].backgroundColor = barColors;
-            // 日付が変わっている可能性があるのでX軸範囲も更新
-            myChart.options.scales.x.min = minTime;
-            myChart.options.scales.x.max = maxTime;
-            myChart.update();
-        } else {
-            // 初回作成
-            myChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    datasets: [{
-                        label: `Room ${roomVal}`,
-                        data: plotData,
-                        backgroundColor: barColors,
-                        barPercentage: 1.0, 
-                        categoryPercentage: 1.0
-                    }]
+    const ctx = document.getElementById('historyChart').getContext('2d');
+    if (myChart) myChart.destroy();
+
+    myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            datasets: [{
+                label: `Room ${roomVal}`,
+                data: plotData,
+                backgroundColor: barColors,
+                barPercentage: 1.0, 
+                categoryPercentage: 1.0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                y: {
+                    display: false, 
+                    min: 0, 
+                    max: 1 
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    scales: {
-                        y: { display: false, min: 0, max: 1 },
-                        x: {
-                            type: 'time',
-                            min: minTime, 
-                            max: maxTime, 
-                            time: {
-                                unit: 'hour',
-                                displayFormats: { hour: 'HH:mm' },
-                                tooltipFormat: 'HH:mm:ss'
-                            },
-                            grid: { display: true, drawBorder: false }
-                        }
+                x: {
+                    type: 'time',
+                    min: minTime,
+                    max: maxTime,
+                    time: {
+                        unit: 'hour',
+                        displayFormats: { hour: 'HH:mm' },
+                        tooltipFormat: 'HH:mm:ss'
                     },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                title: function(context) {
-                                    const date = new Date(context[0].parsed.x);
-                                    return date.toLocaleTimeString('ja-JP');
-                                },
-                                label: function(context) {
-                                    const idx = context.dataIndex;
-                                    const color = context.dataset.backgroundColor[idx];
-                                    if (color === '#4CAF50') return 'Status: 明るい (ON)';
-                                    if (color === '#212121') return 'Status: 暗い (OFF)';
-                                    return 'Unknown';
-                                }
-                            }
+                    grid: {
+                        display: true,
+                        drawBorder: false
+                    },
+                    ticks: {
+                        maxRotation: 0, // スマホで文字が重ならないように回転を防ぐ
+                        autoSkip: true
+                    }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'nearest', // タップした場所に近いデータを表示
+                    intersect: false,
+                    callbacks: {
+                        title: function(context) {
+                            const date = new Date(context[0].parsed.x);
+                            return date.toLocaleTimeString('ja-JP');
+                        },
+                        label: function(context) {
+                            const idx = context.dataIndex;
+                            const color = context.dataset.backgroundColor[idx];
+                            if (color === '#4CAF50') return 'Status: 明るい (ON)';
+                            if (color === '#212121') return 'Status: 暗い (OFF)';
+                            return 'Unknown';
                         }
                     }
                 }
-            });
+            }
         }
     });
 }
@@ -259,11 +363,6 @@ function switchTab(mode) {
     
     document.querySelector(`.tab[onclick="switchTab('${mode}')"]`).classList.add('active');
     document.getElementById(mode).classList.add('active');
-
-    // Historyタブが開かれたら、すぐにデータ読み込みを開始
-    if (mode === 'history') {
-        loadHistory();
-    }
 }
 </script>
 </body>
